@@ -17,7 +17,7 @@ interface Params {
   request: Request;
 }
 
-type Data = Record<string, unknown>;
+type Data = Record<string, any>;
 
 /** Parameters common to all routes */
 interface HttpParams extends Params {
@@ -30,15 +30,27 @@ interface WebSocketParams extends Params {
   response: Response;
 }
 
+/** Parameters for Error routes */
+interface ErrorParams extends Params {
+  error: Error;
+}
+
 /** Handler function type */
 type Handler<D = Data> = (
   params: HttpParams & D,
 ) => HandlerReturn | Promise<HandlerReturn>;
 type HandlerReturn =
   | Response
-  | Router
-  | ReadableStream
   | string
+  | Router
+  | Uint8Array
+  | ReadableStream
+  | Blob
+  | ArrayBuffer
+  | URLSearchParams
+  | FormData
+  | DataView
+  | File
   | AsyncGenerator<string | Uint8Array, void, unknown>;
 
 /** WebSocket handler function type */
@@ -54,6 +66,7 @@ export default class Router {
   routes: Route<unknown>[] = [];
   defaults: Defaults;
   defaultHandler?: Handler<any>;
+  errorHandler?: Handler<any>;
 
   constructor(defaults: Defaults = {}) {
     this.fetch = this.fetch.bind(this);
@@ -71,68 +84,51 @@ export default class Router {
     return this;
   }
 
+  /** Set an error handler for the router */
+  /** This handler will be called when an error occurs in any route */
+  catch(handler: Handler<ErrorParams>): this {
+    this.errorHandler = handler;
+    return this;
+  }
+
   /** Add handlers for GET request */
   get<D = Data>(handler: Handler<D>): this;
-  get<D = Data>(pattern: string, handler: Handler<D>): this;
+  get<D = Data>(pattern: string | boolean, handler: Handler<D>): this;
   get<D = Data>(
-    patternOrHandler: string | Handler<D>,
+    patternOrHandler: string | boolean | Handler<D>,
     handler?: Handler<D>,
   ): this {
-    if (typeof patternOrHandler === "function") {
-      return this.#add(patternOrHandler, "HTTP", "GET");
-    }
-    if (typeof handler === "function") {
-      return this.#add(handler, "HTTP", "GET", patternOrHandler);
-    }
-    throw new Error("Handler must be a function");
+    return this.#addMethod("GET", patternOrHandler, handler);
   }
 
   /** Add handlers for POST requests */
   post<D = Data>(handler: Handler<D>): this;
-  post<D = Data>(pattern: string, handler: Handler<D>): this;
+  post<D = Data>(pattern: string | boolean, handler: Handler<D>): this;
   post<D = Data>(
-    patternOrHandler: string | Handler<D>,
+    patternOrHandler: string | boolean | Handler<D>,
     handler?: Handler<D>,
   ): this {
-    if (typeof patternOrHandler === "function") {
-      return this.#add(patternOrHandler, "HTTP", "POST");
-    }
-    if (typeof handler === "function") {
-      return this.#add(handler, "HTTP", "POST", patternOrHandler);
-    }
-    throw new Error("Handler must be a function");
+    return this.#addMethod("POST", patternOrHandler, handler);
   }
 
   /** Add handlers for PUT requests */
   put<D = Data>(handler: Handler<D>): this;
-  put<D = Data>(pattern: string, handler: Handler<D>): this;
+  put<D = Data>(pattern: string | boolean, handler: Handler<D>): this;
   put<D = Data>(
-    patternOrHandler: string | Handler<D>,
+    patternOrHandler: string | boolean | Handler<D>,
     handler?: Handler<D>,
   ): this {
-    if (typeof patternOrHandler === "function") {
-      return this.#add(patternOrHandler, "HTTP", "PUT");
-    }
-    if (typeof handler === "function") {
-      return this.#add(handler, "HTTP", "PUT", patternOrHandler);
-    }
-    throw new Error("Handler must be a function");
+    return this.#addMethod("POST", patternOrHandler, handler);
   }
 
   /** Add handlers for DELETE requests */
   delete<D = Data>(handler: Handler<D>): this;
-  delete<D = Data>(pattern: string, handler: Handler<D>): this;
+  delete<D = Data>(pattern: string | boolean, handler: Handler<D>): this;
   delete<D = Data>(
-    patternOrHandler: string | Handler<D>,
+    patternOrHandler: string | boolean | Handler<D>,
     handler?: Handler<D>,
   ): this {
-    if (typeof patternOrHandler === "function") {
-      return this.#add(patternOrHandler, "HTTP", "DELETE");
-    }
-    if (typeof handler === "function") {
-      return this.#add(handler, "HTTP", "DELETE", patternOrHandler);
-    }
-    throw new Error("Handler must be a function");
+    return this.#addMethod("DELETE", patternOrHandler, handler);
   }
 
   /** Add a WebSocket handler */
@@ -147,6 +143,27 @@ export default class Router {
     }
     if (typeof handler === "function") {
       return this.#add(handler, "WS", "GET", patternOrHandler);
+    }
+    throw new Error("Handler must be a function");
+  }
+
+  /** Add handlers for any method requests */
+  #addMethod<D = Data>(
+    method: Method,
+    patternOrHandler: string | boolean | Handler<D>,
+    handler?: Handler<D>,
+  ): this {
+    if (typeof patternOrHandler === "function") {
+      return this.#add(patternOrHandler, "HTTP", method);
+    }
+    if (typeof handler === "function") {
+      if (typeof patternOrHandler === "string") {
+        return this.#add(handler, "HTTP", method, patternOrHandler);
+      }
+      if (patternOrHandler === true) {
+        return this.#add(handler, "HTTP", method);
+      }
+      return this;
     }
     throw new Error("Handler must be a function");
   }
@@ -220,7 +237,26 @@ export default class Router {
     handler: Handler<D>,
     params: HttpParams & D,
   ): Promise<Response> {
-    const handleReturn = await handler(params);
+    let handleReturn: HandlerReturn;
+    try {
+      handleReturn = await handler(params);
+    } catch (err) {
+      console.error(err);
+      const error = toError(err);
+      if (this.errorHandler) {
+        try {
+          return await this.#runHandler<ErrorParams>(this.errorHandler, {
+            ...params,
+            error,
+          });
+        } catch (err) {
+          console.error(err);
+          const error = toError(err);
+          return new Response(error.toString(), { status: 500 });
+        }
+      }
+      return new Response(error.toString(), { status: 500 });
+    }
 
     // It's a nested Router
     if (handleReturn instanceof Router) {
@@ -232,9 +268,16 @@ export default class Router {
       return handleReturn;
     }
 
+    // It's a string => return an HTML response
+    if (typeof handleReturn === "string") {
+      return new Response(handleReturn, {
+        status: 200,
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      });
+    }
+
     // It's something that can be used as the body of a Response
     if (
-      typeof handleReturn === "string" ||
       handleReturn instanceof Uint8Array ||
       handleReturn instanceof ReadableStream ||
       handleReturn instanceof Blob ||
@@ -243,9 +286,18 @@ export default class Router {
       handleReturn instanceof FormData ||
       handleReturn instanceof DataView
     ) {
-      return new Response(handleReturn, {
+      return new Response(handleReturn);
+    }
+
+    // It's a File
+    if (handleReturn instanceof File) {
+      return new Response(handleReturn.stream(), {
         status: 200,
-        headers: { "Content-Type": "text/html; charset=utf-8" },
+        headers: {
+          "Content-Type": handleReturn.type || "application/octet-stream",
+          "Content-Length": handleReturn.size.toString(),
+          "Content-Disposition": `attachment; filename="${handleReturn.name}"`,
+        },
       });
     }
 
@@ -265,7 +317,7 @@ export default class Router {
           handleReturn.return?.();
         },
       });
-      return new Response(stream, { status: 200 });
+      return new Response(stream);
     }
 
     throw new Error(`Invalid handler return type, ${typeof handleReturn}`);
@@ -340,4 +392,11 @@ function isAsyncGenerator(
 ): value is AsyncGeneratorFunction {
   return value !== null && typeof value === "object" &&
     typeof (value as any)[Symbol.asyncIterator] === "function";
+}
+
+function toError(err: unknown): Error {
+  if (err instanceof Error) {
+    return err;
+  }
+  return new Error(String(err));
 }

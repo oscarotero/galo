@@ -104,6 +104,16 @@ app.get("/hello/:name/*", ({ name, next }) => {
 });
 ```
 
+## Error handler
+
+Use the `catch()` function to generate a custom response on error:
+
+```js
+app.catch(({ error }) =>
+  new Response(`Server error: ${error}`, { status: 500 })
+);
+```
+
 ## Web sockets
 
 The `.webSocket()` function creates a route to capture a WebSocket connection.
@@ -140,41 +150,98 @@ app.path("/:name/*", ({ name, next }) => {
 });
 ```
 
-## Streams
+## Allowed router returns
+
+Routers can returns different types of data:
+
+### `Response`
+
+Return a `Response` instance for full control:
+
+```js
+app.get("/hello", () => new Response("Hello world"));
+```
+
+### strings
+
+If a router returns a `string` it's converted to a HTML response:
+
+```js
+app.get("/hello", () => "Hello world");
+
+// Equivalent to:
+app.get("/hello", () =>
+  new Response("Hello world", {
+    status: 200,
+    headers: { "Content-Type": "text/html; charset=utf-8" },
+  }));
+```
+
+### Body
+
+Instances of `Uint8Array`, `ReadableStream`, `Blob`, `ArrayBuffer`,
+`URLSearchParams`, `FormData`, `DataView` are used as the body of a `Response`:
+
+```js
+app.get("/hello", () => Uint8Array.fromBase64("PGI+ TURO PC9i Ph"));
+
+// Equivalent to:
+app.get(
+  "/hello",
+  () => new Response(Uint8Array.fromBase64("PGI+ TURO PC9i Ph")),
+);
+```
+
+### `File` instances
+
+`File` instances are converted automatically to a HTTP response:
+
+```js
+app.get("/hello", () => new File(["foo"], "foo.txt", { type: "text/plain" }));
+
+// Equivalent to:
+app.get("/hello", () =>
+  new Response("foo", {
+    status: 200,
+    headers: {
+      "Content-Type": "text/plain",
+      "Content-Length": 3,
+      "Content-Disposition": `attachment; filename="foo.txt"`,
+    },
+  }));
+```
+
+### Async generators
 
 The simplest way to create a stream response is by returning an async generator:
 
 ```js
-app.get("stream", async function* () {
-  yield name + "This is a stream\n";
+app.get("/hello", async function* () {
+  yield "This is a stream\n";
   await wait(1000);
-  yield name + "This is another message\n";
+  yield "This is another message\n";
   await wait(1000);
-  yield name + "This is the last message\n";
+  yield "This is the last message\n";
 });
-```
 
-For more advanced use cases, you can return a `ReadableStream` or a `Response`
-with the `ReadableStream` as the body (example from
-[Deno docs](https://docs.deno.com/examples/http_server_websocket/)):
-
-```js
-app.get("/stream", () => {
-  let timer: number | undefined = undefined;
-
-  return new ReadableStream({
-    start(controller) {
-      timer = setInterval(() => {
-        const message = `It is ${new Date().toISOString()}\n`;
-        controller.enqueue(new TextEncoder().encode(message));
-      }, 100);
-    },
-
-    cancel() {
-      if (timer !== undefined) {
-        clearInterval(timer);
-      }
-    },
-  });
-})
+// Equivalent to:
+app.get("/hello", () =>
+  new Response(
+    new ReadableStream({
+      async start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode("This is a stream\n"),
+        );
+        await wait(1000);
+        controller.enqueue(
+          new TextEncoder().encode("This is another message\n"),
+        );
+        await wait(1000);
+        controller.enqueue(
+          new TextEncoder().encode("This is the last message\n"),
+        );
+        controller.close();
+      },
+    }),
+  ));
 ```
