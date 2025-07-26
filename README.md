@@ -245,3 +245,18 @@ app.get("/hello", () =>
     }),
   ));
 ```
+
+## Static files
+
+Use the `staticFiles()` router to serve files from folders.
+
+```js
+const root = Deno.cwd() + "/static";
+
+// Serve all requests.
+// Requests that return 404 will be handled by the regular routes.
+app.staticFiles("/*", root);
+
+// Serve only requests starting with `/img/`
+app.staticFiles("/img/*", root + "/img");
+```

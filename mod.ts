@@ -1,7 +1,9 @@
 // deno-lint-ignore-file no-explicit-any
+import { join } from "jsr:@std/path@1.1.1/join";
+import { serveFile } from "jsr:@std/http@1.0.20/file-server";
 
 /** Supported methods and protocols */
-type Method = "GET" | "POST" | "PUT" | "DELETE";
+type Method = "GET" | "POST" | "PUT" | "DELETE" | "HEAD";
 type Protocol = "HTTP" | "WS";
 
 /** Router is a tupple with [handler, protocol, method?, path?] */
@@ -10,6 +12,11 @@ type Route<D> = [
   Protocol,
   Method | undefined,
   string[] | undefined,
+];
+
+type StaticRoute = [
+  (request: Request, file: string) => Promise<Response> | Response,
+  string[],
 ];
 
 interface Params {
@@ -53,11 +60,12 @@ type HandlerReturn =
 
 /** WebSocket handler function type */
 type WebSocketHandler<D> = (
-  params: WebSocketParams & D,
+  params: D & WebSocketParams,
 ) => void | Promise<void>;
 
 export default class Router<D extends Data = Data> {
   routes: Route<unknown>[] = [];
+  staticRoutes: StaticRoute[] = [];
   params: D;
   defaultHandler?: Handler<any>;
   errorHandler?: Handler<any>;
@@ -80,6 +88,15 @@ export default class Router<D extends Data = Data> {
   /** Set a default handler for unmatched routes */
   default<T>(handler: Handler<T & D>): this {
     this.defaultHandler = handler;
+    return this;
+  }
+
+  staticFiles(pattern: string, path: string): this {
+    this.staticRoutes.push([
+      (request, file) => serveFile(request, join(path, file)),
+      toParts(pattern),
+    ]);
+
     return this;
   }
 
@@ -185,6 +202,24 @@ export default class Router<D extends Data = Data> {
 
   async #exec(parts: string[], request: Request): Promise<Response> {
     const reqMethod = request.method as Method;
+
+    for (const [handler, pattern] of this.staticRoutes) {
+      if (reqMethod !== "GET" && reqMethod !== "HEAD") {
+        continue;
+      }
+
+      const params = matches(pattern, parts);
+
+      if (!params?._.length) {
+        continue;
+      }
+
+      const response = await handler(request, params._.join("/"));
+
+      if (response.status !== 404) {
+        return response;
+      }
+    }
 
     for (const [handler, protocol, method, pattern] of this.routes) {
       if (method && reqMethod !== method) {
@@ -346,7 +381,7 @@ function toParts(pattern: string): string[] {
 }
 
 /** Match a pattern with an array of directories */
-function matches(pattern: string[], parts: string[]): Params | false {
+function matches(pattern: string[], parts: string[]): Params | undefined {
   const captures: Record<string, string> = {};
   const hasWildcard = pattern[pattern.length - 1] === "*";
 
@@ -354,10 +389,10 @@ function matches(pattern: string[], parts: string[]): Params | false {
     pattern = pattern.slice(0, -1);
 
     if (pattern.length > parts.length) {
-      return false;
+      return;
     }
   } else if (pattern.length !== parts.length) {
-    return false;
+    return;
   }
 
   for (let i = 0; i < pattern.length; i++) {
@@ -367,7 +402,7 @@ function matches(pattern: string[], parts: string[]): Params | false {
     if (part.startsWith(":")) {
       captures[part.slice(1)] = decodeURIComponent(value);
     } else if (part !== value) {
-      return false;
+      return;
     }
   }
 
