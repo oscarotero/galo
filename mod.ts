@@ -15,6 +15,7 @@ type Route<D> = [
 interface Params {
   _: string[];
   request: Request;
+  [key: string]: any; // Allow additional parameters
 }
 
 type Data = Record<string, any>;
@@ -30,14 +31,9 @@ interface WebSocketParams extends Params {
   response: Response;
 }
 
-/** Parameters for Error routes */
-interface ErrorParams extends Params {
-  error: Error;
-}
-
 /** Handler function type */
-type Handler<D = Data> = (
-  params: HttpParams & D,
+type Handler<D> = (
+  params: D & HttpParams,
 ) => HandlerReturn | Promise<HandlerReturn>;
 type HandlerReturn =
   | Response
@@ -56,85 +52,90 @@ type HandlerReturn =
   | AsyncGenerator<string | Uint8Array, void, unknown>;
 
 /** WebSocket handler function type */
-type WebSocketHandler<D = Data> = (
+type WebSocketHandler<D> = (
   params: WebSocketParams & D,
 ) => void | Promise<void>;
 
-export default class Router {
+export default class Router<D extends Data = Data> {
   routes: Route<unknown>[] = [];
+  params: D;
   defaultHandler?: Handler<any>;
   errorHandler?: Handler<any>;
-  next: () => Router;
+  next: <T>(params?: T) => Router<D & T>;
+  fetch: (request: Request) => Promise<Response>;
 
-  constructor() {
-    this.fetch = this.fetch.bind(this);
-    this.next = () => new Router();
+  constructor(params?: D) {
+    this.params = params || {} as D;
+    this.next = <T>(params?: T) =>
+      new Router<D & T>({ ...this.params, ...params } as D & T);
+    this.fetch = (request: Request) =>
+      this.#exec(toParts(new URL(request.url).pathname), request);
   }
 
   /** Add a handler for a path */
-  path<D = Data>(pattern: string, handler: Handler<D>): this {
+  path<T>(pattern: string, handler: Handler<T & D>): this {
     return this.#add(handler, "HTTP", undefined, pattern);
   }
 
   /** Set a default handler for unmatched routes */
-  default<D = Data>(handler: Handler<D>): this {
+  default<T>(handler: Handler<T & D>): this {
     this.defaultHandler = handler;
     return this;
   }
 
   /** Set an error handler for the router */
   /** This handler will be called when an error occurs in any route */
-  catch(handler: Handler<ErrorParams>): this {
+  catch<T>(handler: Handler<T & D & { error: Error }>): this {
     this.errorHandler = handler;
     return this;
   }
 
   /** Add handlers for GET request */
-  get<D = Data>(handler: Handler<D>): this;
-  get<D = Data>(pattern: string | boolean, handler: Handler<D>): this;
-  get<D = Data>(
-    patternOrHandler: string | boolean | Handler<D>,
-    handler?: Handler<D>,
+  get<T>(handler: Handler<T & D>): this;
+  get<T>(pattern: string | boolean, handler: Handler<T & D>): this;
+  get<T>(
+    patternOrHandler: string | boolean | Handler<T & D>,
+    handler?: Handler<T & D>,
   ): this {
     return this.#addMethod("GET", patternOrHandler, handler);
   }
 
   /** Add handlers for POST requests */
-  post<D = Data>(handler: Handler<D>): this;
-  post<D = Data>(pattern: string | boolean, handler: Handler<D>): this;
-  post<D = Data>(
-    patternOrHandler: string | boolean | Handler<D>,
-    handler?: Handler<D>,
+  post<T>(handler: Handler<T & D>): this;
+  post<T>(pattern: string | boolean, handler: Handler<T & D>): this;
+  post<T>(
+    patternOrHandler: string | boolean | Handler<T & D>,
+    handler?: Handler<T & D>,
   ): this {
     return this.#addMethod("POST", patternOrHandler, handler);
   }
 
   /** Add handlers for PUT requests */
-  put<D = Data>(handler: Handler<D>): this;
-  put<D = Data>(pattern: string | boolean, handler: Handler<D>): this;
-  put<D = Data>(
-    patternOrHandler: string | boolean | Handler<D>,
-    handler?: Handler<D>,
+  put<T>(handler: Handler<T & D>): this;
+  put<T>(pattern: string | boolean, handler: Handler<T & D>): this;
+  put<T>(
+    patternOrHandler: string | boolean | Handler<T & D>,
+    handler?: Handler<T & D>,
   ): this {
     return this.#addMethod("POST", patternOrHandler, handler);
   }
 
   /** Add handlers for DELETE requests */
-  delete<D = Data>(handler: Handler<D>): this;
-  delete<D = Data>(pattern: string | boolean, handler: Handler<D>): this;
-  delete<D = Data>(
-    patternOrHandler: string | boolean | Handler<D>,
-    handler?: Handler<D>,
+  delete<T>(handler: Handler<T & D>): this;
+  delete<T>(pattern: string | boolean, handler: Handler<T & D>): this;
+  delete<T>(
+    patternOrHandler: string | boolean | Handler<T & D>,
+    handler?: Handler<T & D>,
   ): this {
     return this.#addMethod("DELETE", patternOrHandler, handler);
   }
 
   /** Add a WebSocket handler */
-  webSocket<D = Data>(handler: WebSocketHandler<D>): this;
-  webSocket<D = Data>(pattern: string, handler: WebSocketHandler<D>): this;
-  webSocket<D = Data>(
-    patternOrHandler: string | WebSocketHandler<D>,
-    handler?: WebSocketHandler<D>,
+  webSocket<T>(handler: WebSocketHandler<T & D>): this;
+  webSocket<T>(pattern: string, handler: WebSocketHandler<T & D>): this;
+  webSocket<T>(
+    patternOrHandler: string | WebSocketHandler<T & D>,
+    handler?: WebSocketHandler<T & D>,
   ): this {
     if (typeof patternOrHandler === "function") {
       return this.#add(patternOrHandler, "WS", "GET");
@@ -146,7 +147,7 @@ export default class Router {
   }
 
   /** Add handlers for any method requests */
-  #addMethod<D = Data>(
+  #addMethod<D>(
     method: Method,
     patternOrHandler: string | boolean | Handler<D>,
     handler?: Handler<D>,
@@ -198,15 +199,20 @@ export default class Router {
 
       if (protocol === "WS") {
         if (isWebsocket(request)) {
-          return await this.#runWebSocketHandler(handler as WebSocketHandler, {
-            request,
-            ...params,
-          });
+          return await this.#runWebSocketHandler(
+            handler as WebSocketHandler<D>,
+            {
+              ...this.params,
+              ...params,
+              request,
+            },
+          );
         }
         continue;
       }
 
-      return await this.#runHandler(handler as Handler, {
+      return await this.#runHandler(handler as Handler<D>, {
+        ...this.params,
         ...params,
         request,
         next: this.next,
@@ -215,8 +221,9 @@ export default class Router {
 
     if (this.defaultHandler) {
       return await this.#runHandler(this.defaultHandler, {
-        _: parts,
+        ...this.params,
         request,
+        _: parts,
         next: this.next,
       });
     }
@@ -236,7 +243,7 @@ export default class Router {
       const error = toError(err);
       if (this.errorHandler) {
         try {
-          return await this.#runHandler<ErrorParams>(this.errorHandler, {
+          return await this.#runHandler(this.errorHandler, {
             ...params,
             error,
           });
@@ -319,20 +326,14 @@ export default class Router {
     throw new Error(`Invalid handler return type, ${typeof handleReturn}`);
   }
 
-  async #runWebSocketHandler(
-    handler: WebSocketHandler,
-    params: Params,
+  async #runWebSocketHandler<D>(
+    handler: WebSocketHandler<D>,
+    params: Params & D,
   ): Promise<Response> {
     const { request } = params;
     const { response, socket } = Deno.upgradeWebSocket(request);
-    await (handler as WebSocketHandler)({ ...params, socket, response });
+    await handler({ ...this.params, ...params, socket, response });
     return response;
-  }
-
-  /** Fetch method to handle incoming requests */
-  fetch(request: Request): Promise<Response> {
-    const parts = toParts(new URL(request.url).pathname);
-    return this.#exec(parts, request);
   }
 }
 
@@ -391,8 +392,5 @@ function isAsyncGenerator(
 }
 
 function toError(err: unknown): Error {
-  if (err instanceof Error) {
-    return err;
-  }
-  return new Error(String(err));
+  return err instanceof Error ? err : new Error(String(err));
 }

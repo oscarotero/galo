@@ -26,7 +26,8 @@ Deno.bench("Oak", async () => {
   const response = await oak.fetch(
     new Request("http://localhost/World"),
     {},
-    {} as any, // Oak expects a context object
+    // deno-lint-ignore no-explicit-any
+    {} as any,
   );
   console.assert(await response.text() === "Hello, World!");
 });
