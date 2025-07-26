@@ -368,7 +368,7 @@ function matches(pattern: string[], parts: string[]): Params | false {
     const value = parts[i];
 
     if (part.startsWith(":")) {
-      captures[part.slice(1)] = value;
+      captures[part.slice(1)] = decodeURIComponent(value);
     } else if (part !== value) {
       return false;
     }
