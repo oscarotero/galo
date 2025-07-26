@@ -282,7 +282,8 @@ app.staticFiles("/img/*", root + "/img");
 
 ## Middlewares
 
-Middlewares allows to execute code before and after executing the router. You can register new middlewares with the `use()` function:
+Middlewares allows to execute code before and after executing the router. You
+can register new middlewares with the `use()` function:
 
 ```js
 app.use(async (request, next) => {
