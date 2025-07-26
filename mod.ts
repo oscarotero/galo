@@ -42,6 +42,8 @@ type Handler<D = Data> = (
 type HandlerReturn =
   | Response
   | string
+  | object
+  | Array<unknown>
   | Router
   | Uint8Array
   | ReadableStream
@@ -58,24 +60,20 @@ type WebSocketHandler<D = Data> = (
   params: WebSocketParams & D,
 ) => void | Promise<void>;
 
-interface Defaults {
-  method?: Method;
-}
-
 export default class Router {
   routes: Route<unknown>[] = [];
-  defaults: Defaults;
   defaultHandler?: Handler<any>;
   errorHandler?: Handler<any>;
+  next: () => Router;
 
-  constructor(defaults: Defaults = {}) {
+  constructor() {
     this.fetch = this.fetch.bind(this);
-    this.defaults = defaults;
+    this.next = () => new Router();
   }
 
   /** Add a handler for a path */
   path<D = Data>(pattern: string, handler: Handler<D>): this {
-    return this.#add(handler, "HTTP", this.defaults.method, pattern);
+    return this.#add(handler, "HTTP", undefined, pattern);
   }
 
   /** Set a default handler for unmatched routes */
@@ -187,13 +185,6 @@ export default class Router {
   async #exec(parts: string[], request: Request): Promise<Response> {
     const reqMethod = request.method as Method;
 
-    const next = () => {
-      return new Router({
-        ...this.defaults,
-        method: reqMethod,
-      });
-    };
-
     for (const [handler, protocol, method, pattern] of this.routes) {
       if (method && reqMethod !== method) {
         continue;
@@ -218,7 +209,7 @@ export default class Router {
       return await this.#runHandler(handler as Handler, {
         ...params,
         request,
-        next,
+        next: this.next,
       });
     }
 
@@ -226,7 +217,7 @@ export default class Router {
       return await this.#runHandler(this.defaultHandler, {
         _: parts,
         request,
-        next,
+        next: this.next,
       });
     }
 
@@ -320,6 +311,11 @@ export default class Router {
       return new Response(stream);
     }
 
+    // It's an object or array => return a JSON response
+    if (typeof handleReturn === "object" || Array.isArray(handleReturn)) {
+      return Response.json(handleReturn);
+    }
+
     throw new Error(`Invalid handler return type, ${typeof handleReturn}`);
   }
 
@@ -389,7 +385,7 @@ function isWebsocket(request: Request): boolean {
 /** Check if a function is an async generator */
 function isAsyncGenerator(
   value: unknown,
-): value is AsyncGeneratorFunction {
+): value is AsyncGenerator<string | Uint8Array, void, unknown> {
   return value !== null && typeof value === "object" &&
     typeof (value as any)[Symbol.asyncIterator] === "function";
 }
