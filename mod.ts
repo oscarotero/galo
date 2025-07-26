@@ -7,8 +7,12 @@ type Method = "GET" | "POST" | "PUT" | "DELETE" | "HEAD";
 type Protocol = "HTTP" | "WS";
 
 /** Router is a tupple with [handler, protocol, method?, path?] */
-type Route<D> = [
-  Handler<D> | WebSocketHandler<D>,
+type RouteHandler<D extends Data> =
+  | Handler<D>
+  | WebSocketHandler<D>
+  | Router<D>;
+type Route<D extends Data> = [
+  RouteHandler<D>,
   Protocol,
   Method | undefined,
   string[] | undefined,
@@ -39,9 +43,10 @@ interface WebSocketParams extends Params {
 }
 
 /** Handler function type */
-type Handler<D> = (
+type Handler<D = Data> = (
   params: D & HttpParams,
 ) => HandlerReturn | Promise<HandlerReturn>;
+
 type HandlerReturn =
   | Response
   | string
@@ -58,13 +63,15 @@ type HandlerReturn =
   | File
   | AsyncGenerator<string | Uint8Array, void, unknown>;
 
+type HandlerOrRouter<T extends Data> = Handler<T> | Router<T>;
+
 /** WebSocket handler function type */
 type WebSocketHandler<D> = (
   params: D & WebSocketParams,
 ) => void | Promise<void>;
 
 export default class Router<D extends Data = Data> {
-  routes: Route<unknown>[] = [];
+  routes: Route<any>[] = [];
   staticRoutes: StaticRoute[] = [];
   params: D;
   defaultHandler?: Handler<any>;
@@ -81,7 +88,7 @@ export default class Router<D extends Data = Data> {
   }
 
   /** Add a handler for a path */
-  path<T>(pattern: string, handler: Handler<T & D>): this {
+  path<T>(pattern: string, handler: HandlerOrRouter<T & D>): this {
     return this.#add(handler, "HTTP", undefined, pattern);
   }
 
@@ -108,48 +115,63 @@ export default class Router<D extends Data = Data> {
   }
 
   /** Add handlers for GET request */
-  get<T>(handler: Handler<T & D>): this;
-  get<T>(pattern: string | boolean, handler: Handler<T & D>): this;
+  get<T>(handler: HandlerOrRouter<T & D>): this;
   get<T>(
-    patternOrHandler: string | boolean | Handler<T & D>,
-    handler?: Handler<T & D>,
+    pattern: string | boolean,
+    handler: HandlerOrRouter<T & D>,
+  ): this;
+  get<T>(
+    patternOrHandler: string | boolean | HandlerOrRouter<T & D>,
+    handler?: HandlerOrRouter<T & D>,
   ): this {
     return this.#addMethod("GET", patternOrHandler, handler);
   }
 
   /** Add handlers for POST requests */
-  post<T>(handler: Handler<T & D>): this;
-  post<T>(pattern: string | boolean, handler: Handler<T & D>): this;
+  post<T>(handler: HandlerOrRouter<T & D>): this;
   post<T>(
-    patternOrHandler: string | boolean | Handler<T & D>,
-    handler?: Handler<T & D>,
+    pattern: string | boolean,
+    handler: HandlerOrRouter<T & D>,
+  ): this;
+  post<T>(
+    patternOrHandler: string | boolean | HandlerOrRouter<T & D>,
+    handler?: HandlerOrRouter<T & D>,
   ): this {
     return this.#addMethod("POST", patternOrHandler, handler);
   }
 
   /** Add handlers for PUT requests */
-  put<T>(handler: Handler<T & D>): this;
-  put<T>(pattern: string | boolean, handler: Handler<T & D>): this;
+  put<T>(handler: HandlerOrRouter<T & D>): this;
   put<T>(
-    patternOrHandler: string | boolean | Handler<T & D>,
-    handler?: Handler<T & D>,
+    pattern: string | boolean,
+    handler: HandlerOrRouter<T & D>,
+  ): this;
+  put<T>(
+    patternOrHandler: string | boolean | HandlerOrRouter<T & D>,
+    handler?: HandlerOrRouter<T & D>,
   ): this {
     return this.#addMethod("POST", patternOrHandler, handler);
   }
 
   /** Add handlers for DELETE requests */
-  delete<T>(handler: Handler<T & D>): this;
-  delete<T>(pattern: string | boolean, handler: Handler<T & D>): this;
+  delete<T>(handler: HandlerOrRouter<T & D>): this;
   delete<T>(
-    patternOrHandler: string | boolean | Handler<T & D>,
-    handler?: Handler<T & D>,
+    pattern: string | boolean,
+    handler: HandlerOrRouter<T & D>,
+  ): this;
+  delete<T>(
+    patternOrHandler: string | boolean | HandlerOrRouter<T & D>,
+    handler?: HandlerOrRouter<T & D>,
   ): this {
     return this.#addMethod("DELETE", patternOrHandler, handler);
   }
 
   /** Add a WebSocket handler */
   webSocket<T>(handler: WebSocketHandler<T & D>): this;
-  webSocket<T>(pattern: string, handler: WebSocketHandler<T & D>): this;
+  webSocket<T>(
+    pattern: string,
+    handler: WebSocketHandler<T & D>,
+  ): this;
   webSocket<T>(
     patternOrHandler: string | WebSocketHandler<T & D>,
     handler?: WebSocketHandler<T & D>,
@@ -164,15 +186,18 @@ export default class Router<D extends Data = Data> {
   }
 
   /** Add handlers for any method requests */
-  #addMethod<D>(
+  #addMethod<T>(
     method: Method,
-    patternOrHandler: string | boolean | Handler<D>,
-    handler?: Handler<D>,
+    patternOrHandler: string | boolean | HandlerOrRouter<T & D>,
+    handler?: HandlerOrRouter<T & D>,
   ): this {
-    if (typeof patternOrHandler === "function") {
+    if (
+      typeof patternOrHandler === "function" ||
+      patternOrHandler instanceof Router
+    ) {
       return this.#add(patternOrHandler, "HTTP", method);
     }
-    if (typeof handler === "function") {
+    if (typeof handler === "function" || handler instanceof Router) {
       if (typeof patternOrHandler === "string") {
         return this.#add(handler, "HTTP", method, patternOrHandler);
       }
@@ -184,14 +209,14 @@ export default class Router<D extends Data = Data> {
     throw new Error("Handler must be a function");
   }
 
-  #add(
-    handler: Handler<any> | WebSocketHandler<any>,
+  #add<T>(
+    routeHandler: RouteHandler<T & D>,
     protocol: Protocol,
     method?: Method,
     pattern?: string,
   ): this {
     this.routes.push([
-      handler,
+      routeHandler,
       protocol,
       method,
       pattern ? toParts(pattern) : undefined,
@@ -246,7 +271,7 @@ export default class Router<D extends Data = Data> {
         continue;
       }
 
-      return await this.#runHandler(handler as Handler<D>, {
+      return await this.#runHandler(handler as Handler<D> | Router<D>, {
         ...this.params,
         ...params,
         request,
@@ -266,13 +291,18 @@ export default class Router<D extends Data = Data> {
     return new Response("Not Found", { status: 404 });
   }
 
-  async #runHandler<D>(
-    handler: Handler<D>,
+  async #runHandler<D extends Data>(
+    handler: Handler<D> | Router<D>,
     params: HttpParams & D,
   ): Promise<Response> {
     let handleReturn: HandlerReturn;
     try {
-      handleReturn = await handler(params);
+      if (handler instanceof Router) {
+        Object.assign(handler.params, this.params);
+        handleReturn = await handler.#exec(params._, params.request);
+      } else {
+        handleReturn = await handler(params);
+      }
     } catch (err) {
       console.error(err);
       const error = toError(err);

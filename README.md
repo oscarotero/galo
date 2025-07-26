@@ -81,6 +81,25 @@ app.path("/item/:id", ({ id, next }) => {
 });
 ```
 
+### Booleans
+
+Instead of paths, it's possible to use booleans to match a route:
+
+```js
+app.path("/item/:action/:id", ({ action, id, next }) => {
+  const item = getItem(id);
+
+  if (!item) {
+    return new Response("Not Found", { status: 404 });
+  }
+
+  return next()
+    .get(action === "view", () => printItem(item))
+    .get(action === "edit", () => editForm(item))
+    .post(action === "edit", () => editItem(item));
+});
+```
+
 ## Default handler
 
 The `default()` function allows to specify a default handler:
@@ -259,4 +278,32 @@ app.staticFiles("/*", root);
 
 // Serve only requests starting with `/img/`
 app.staticFiles("/img/*", root + "/img");
+```
+
+## Distribute the app in different files
+
+For large apps, you may want to distribute routes in different files. You can
+use a `Router` instances as route handlers. Example:
+
+```js
+// routes/items.ts
+import { Router } from "galo/mod.ts";
+
+const app = new Router();
+
+app.get("/", listItems);
+app.post("/", createItem);
+app.get("/:id", returnItem);
+
+export default app;
+```
+
+Then, import them and mount on the paths /items:
+
+```js
+import items from "./routes/items.ts";
+
+const app = new Router();
+
+app.path("/items/*", items);
 ```
