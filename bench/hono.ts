@@ -2,14 +2,13 @@ import { Hono } from "npm:hono@4.8.5";
 
 const app = new Hono();
 
-app.get("/not/:name", (c) => {
-  const name = c.req.param("name");
-  return c.text(`Hello, ${name}!`);
-});
+for (let i = 1; i <= 10; i++) {
+  app.get(`/not${i}/:name`, () => new Response("Nop"));
+}
 
 app.get("/:name", (c) => {
   const name = c.req.param("name");
-  return c.text(`Hello, ${name}!`);
+  return new Response(`Hello, ${name}!`);
 });
 
 export default app;

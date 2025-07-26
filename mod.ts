@@ -71,6 +71,7 @@ type WebSocketHandler<D> = (
 ) => void | Promise<void>;
 
 export default class Router<D extends Data = Data> {
+  middlewares: Middleware[] = [];
   routes: Route<any>[] = [];
   staticRoutes: StaticRoute[] = [];
   params: D;
@@ -84,7 +85,14 @@ export default class Router<D extends Data = Data> {
     this.next = <T>(params?: T) =>
       new Router<D & T>({ ...this.params, ...params } as D & T);
     this.fetch = (request: Request) =>
-      this.#exec(toParts(new URL(request.url).pathname), request);
+      this.#run(request, toParts(new URL(request.url).pathname));
+  }
+
+  /** Add middleware to the router */
+  /** Middleware will be executed before any route handler */
+  use(...middlewares: Middleware[]): this {
+    this.middlewares.push(...middlewares);
+    return this;
   }
 
   /** Add a handler for a path */
@@ -225,7 +233,29 @@ export default class Router<D extends Data = Data> {
     return this;
   }
 
-  async #exec(parts: string[], request: Request): Promise<Response> {
+  async #run(request: Request, parts: string[]): Promise<Response> {
+    if (this.middlewares.length === 0) {
+      return await this.#runRouter(request, parts);
+    }
+
+    const middlewares = [...this.middlewares];
+
+    const next: RequestHandler = async (
+      request: Request,
+    ): Promise<Response> => {
+      const middleware = middlewares.shift();
+
+      if (middleware) {
+        return await middleware(request, next);
+      }
+
+      return await this.#runRouter(request, parts);
+    };
+
+    return await next(request);
+  }
+
+  async #runRouter(request: Request, parts: string[]): Promise<Response> {
     const reqMethod = request.method as Method;
 
     for (const [handler, pattern] of this.staticRoutes) {
@@ -299,7 +329,7 @@ export default class Router<D extends Data = Data> {
     try {
       if (handler instanceof Router) {
         Object.assign(handler.params, this.params);
-        handleReturn = await handler.#exec(params._, params.request);
+        handleReturn = await handler.#run(params.request, params._);
       } else {
         handleReturn = await handler(params);
       }
@@ -321,9 +351,12 @@ export default class Router<D extends Data = Data> {
       return new Response(error.toString(), { status: 500 });
     }
 
-    // It's a nested Router
-    if (handleReturn instanceof Router) {
-      return handleReturn.#exec(params._, params.request);
+    // It's a string => return an HTML response
+    if (typeof handleReturn === "string") {
+      return new Response(handleReturn, {
+        status: 200,
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      });
     }
 
     // It's a Response
@@ -331,12 +364,9 @@ export default class Router<D extends Data = Data> {
       return handleReturn;
     }
 
-    // It's a string => return an HTML response
-    if (typeof handleReturn === "string") {
-      return new Response(handleReturn, {
-        status: 200,
-        headers: { "Content-Type": "text/html; charset=utf-8" },
-      });
+    // It's a nested Router
+    if (handleReturn instanceof Router) {
+      return handleReturn.#run(params.request, params._);
     }
 
     // It's something that can be used as the body of a Response
@@ -459,3 +489,10 @@ function isAsyncGenerator(
 function toError(err: unknown): Error {
   return err instanceof Error ? err : new Error(String(err));
 }
+
+export type Middleware = (
+  request: Request,
+  next: RequestHandler,
+) => Promise<Response>;
+
+export type RequestHandler = (request: Request) => Promise<Response>;

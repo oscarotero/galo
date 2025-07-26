@@ -280,6 +280,19 @@ app.staticFiles("/*", root);
 app.staticFiles("/img/*", root + "/img");
 ```
 
+## Middlewares
+
+Middlewares allows to execute code before and after executing the router. You can register new middlewares with the `use()` function:
+
+```js
+app.use(async (request, next) => {
+  console.log("Before the router");
+  const response = next(request);
+  console.log("After the router");
+  return response;
+});
+```
+
 ## Distribute the app in different files
 
 For large apps, you may want to distribute routes in different files. You can
