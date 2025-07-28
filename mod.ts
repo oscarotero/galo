@@ -169,21 +169,21 @@ export default class Router<D extends Data = Data> {
   socket<T>(
     handler: HandlerOrRouter<
       T & D & { socket: WebSocket; response: Response },
-      undefined
+      void | Response
     >,
   ): this;
   socket<T>(
     pattern: string | boolean,
     handler: HandlerOrRouter<
       T & D & { socket: WebSocket; response: Response },
-      undefined
+      void | Response
     >,
   ): this;
   socket<T>(
     patternOrHandler: string | boolean | HandlerOrRouter<T & D>,
     handler?: HandlerOrRouter<
       T & D & { socket: WebSocket; response: Response },
-      undefined
+      void | Response
     >,
   ): this {
     return this.#addMethod("GET", "WS", patternOrHandler, handler);
