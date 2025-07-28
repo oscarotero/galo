@@ -52,8 +52,7 @@ Deno.test("Nested routes", async () => {
   );
 });
 
-// sanitizeResources is set to true due https://github.com/denoland/std/issues/6776
-Deno.test("Static files", { sanitizeResources: false }, async () => {
+Deno.test("Static files", async () => {
   const router = new Router();
   router.staticFiles("/bench/*", Deno.cwd() + "/bench");
 
@@ -77,6 +76,7 @@ async function assert(
 
   if (typeof expected === "number") {
     assertEquals(response.status, expected);
+    response.body?.cancel();
   } else {
     assertEquals(await response.text(), expected);
   }
