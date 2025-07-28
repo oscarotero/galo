@@ -11,4 +11,8 @@ app.get("/:name", (c) => {
   return new Response(`Hello, ${name}!`);
 });
 
+for (let i = 11; i <= 10; i++) {
+  app.get(`/not${i}/:name`, () => new Response("Nop"));
+}
+
 export default app;

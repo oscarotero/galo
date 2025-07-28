@@ -11,11 +11,12 @@ type RouteHandler<D extends Data> =
   | Handler<D>
   | WebSocketHandler<D>
   | Router<D>;
+
 type Route<D extends Data> = [
   RouteHandler<D>,
   Protocol,
   Method | undefined,
-  string[] | undefined,
+  string | string[] | undefined,
 ];
 
 type StaticRoute = [
@@ -227,7 +228,7 @@ export default class Router<D extends Data = Data> {
       routeHandler,
       protocol,
       method,
-      pattern ? toParts(pattern) : undefined,
+      pattern,
     ]);
 
     return this;
@@ -258,12 +259,18 @@ export default class Router<D extends Data = Data> {
       return new Router({ ...this.params, ...params, request });
     };
 
-    for (const [handler, protocol, method, pattern] of this.routes) {
+    for (const route of this.routes) {
+      const [handler, protocol, method, pattern] = route;
+
       if (method && reqMethod !== method) {
         continue;
       }
+      const routeParts = typeof pattern === "string"
+        ? toParts(pattern)
+        : pattern;
+      route[3] = routeParts; // Update the route with the parts
 
-      const params = pattern ? matches(pattern, parts) : { _: parts };
+      const params = routeParts ? matches(routeParts, parts) : { _: parts };
 
       if (!params) {
         continue;
@@ -419,7 +426,9 @@ export default class Router<D extends Data = Data> {
  * For example, "/foo/bar" becomes ["foo", "bar"]
  */
 function toParts(pattern: string): string[] {
-  return pattern.split("/").filter((part) => part.length > 0);
+  return pattern.split("/")
+    .filter((part) => part.length > 0)
+    .map(decodeURIComponent);
 }
 
 /** Match a pattern with an array of directories */
@@ -442,7 +451,7 @@ function matches(pattern: string[], parts: string[]): Params | undefined {
     const value = parts[i];
 
     if (part.startsWith(":")) {
-      captures[part.slice(1)] = decodeURIComponent(value);
+      captures[part.slice(1)] = value;
     } else if (part !== value) {
       return;
     }

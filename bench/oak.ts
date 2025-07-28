@@ -12,6 +12,10 @@ router.get("/:name", (ctx) => {
   ctx.response.body = `Hello, ${name}!`;
 });
 
+for (let i = 11; i <= 10; i++) {
+  router.get(`/not${i}/:name`, (ctx) => ctx.response.body = "Nop");
+}
+
 const app = new Application();
 app.use(router.routes());
 

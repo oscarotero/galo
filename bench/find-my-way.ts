@@ -11,4 +11,7 @@ router.on("GET", "/:name", (_req, _res, params) => {
   return new Response(`Hello, ${name}!`);
 });
 
+for (let i = 11; i <= 10; i++) {
+  router.on("GET", `/not${i}/:name`, () => new Response("Nop"));
+}
 export default router;

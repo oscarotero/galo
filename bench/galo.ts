@@ -10,4 +10,8 @@ router.get("/:name", ({ name }) => {
   return new Response(`Hello, ${name}!`);
 });
 
+for (let i = 11; i <= 10; i++) {
+  router.get(`/not${i}/:name`, () => new Response("Nop"));
+}
+
 export default router;
