@@ -352,7 +352,7 @@ export default class Router<D extends Data = Data> {
 
     // It's something that can be used as the body of a Response
     if (handleReturn === undefined) {
-      params.response || new Response();
+      return params.response || new Response();
     }
 
     // It's something that can be used as the body of a Response
