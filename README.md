@@ -4,41 +4,48 @@ Minimalist fast & flexible router.
 
 ## Getting started
 
-Let's start with this simple app, to return a "Hello world" response to a
-`GET /` HTTP request.
-
 ```js
+// app.ts
 import Router from "galo/mod.ts";
 
 const app = new Router();
 
-app.get("/", () => new Response("Hello world"));
+app
+  .get("/", () => new Response("Hello world"))
+
+  //For convenience, return a string to create a HTML response:
+  .get("/hello.html", () => "Hello <strong>world</strong>")
+
+  //Return an object or array to create a JSON response:
+  .get("/hello.json", () => ({ text: "Hello world" }))
+
+  //Captured values are passed as properties
+  .get("/:name", ({ name }) => `Hello <strong>${name}</strong>`)
+
+  //Support wilcard to capture the remaining path (array stored in the `_` property)
+  .get("/example/*", ({ _ }) => `The wildcard content is: ${_.join(", ")}`);
+
+  //The `Request` instance is passed as `request` property:
+  .get("/hello", ({ request }) => `Hello from ${request.url}`)
+
+//Returns the app so you can run it with `deno serve app.ts`
+export default app;
 ```
 
-For convenience, you can return a string to create a HTML response:
+## API:
 
-```js
-app.get("/", () => "Hello <strong>world</strong>");
-```
-
-Capture values from the path:
-
-```js
-app.get("/:name", ({ name }) => `Hello <strong>${name}</strong>`);
-```
-
-Use a willcard to capture the remaining directories (array stored in the `_`
-property).
-
-```js
-app.get("/:name/*", ({ name, _ }) => `Hello ${name} and ${_.join(", ")}`);
-```
-
-The `Request` instance is stored in the `request` property:
-
-```js
-app.get("/:name", ({ name, request }) => `Hello ${name} from ${request.url}`);
-```
+- `path(path, callback)`: Matches requests for a specific path.
+- `get(path, callback)`: Matches GET requests for a specific path.
+- `get(callback)`: Matches GET requests for any path.
+- `post(path, callback)`: Matches POST requests for a specific path.
+- `post(callback)`: Matches POST requests for any path.
+- `put(path, callback)`: Matches PUT requests for a specific path.
+- `put(callback)`: Matches PUT requests for any path.
+- `delete(path, callback)`: Matches DELETE requests for a specific path.
+- `delete(callback)`: Matches DELETE requests for any path.
+- `default(callback)`: Default handler for unmatched requests.
+- `catch(callback)`: Error handler to capture exceptions.
+- `socket(callback)`: Matches requests with WebSocket connections.
 
 ## Slashes
 
@@ -53,14 +60,30 @@ app.get("hello/world", () => "Hello world");
 
 ## Nested routes
 
-Use a wildcard and the `next` property to create nested routes:
+Any route handler can return another router (created with the `next` function)
+to prolong the flow.
 
 ```js
-app.get("/hello/:name/*", ({ name, next }) => {
+//Capture all requests to `/hello/:name` path
+app.path("/hello/:name", ({ next, name }) => {
+  //Return a different response per HTTP method:
   return next()
-    .path("/morning", () => `Good morning, ${name}`)
-    .path("/afternoon", () => `Good afternoon, ${name}`)
-    .path("/night", () => `Good night, ${name}`);
+    .get(() => `Hello ${name} from GET`)
+    .post(() => `Hello ${name} from POST`)
+    .put(() => `Hello ${name} from PUT`)
+    .delete(() => `Hello ${name} from DELETE`);
+});
+```
+
+Use a wildcard in the parent route to allow nested routes to match additional
+path segments:
+
+```js
+app.get("/good/*", ({ next }) => {
+  return next()
+    .path("/morning", () => "Good morning")
+    .path("/afternoon", () => "Good afternoon")
+    .path("/night", () => "Good night");
 });
 ```
 
@@ -96,36 +119,15 @@ app.path("/item/:action/:id", ({ action, id, next }) => {
   return next()
     .get(action === "view", () => printItem(item))
     .get(action === "edit", () => editForm(item))
-    .post(action === "edit", () => editItem(item));
-});
-```
-
-## Default handler
-
-The `default()` function allows to specify a default handler:
-
-```js
-app
-  .get("/", () => "Welcome")
-  .get("/about", () => "About me")
-  .default(() => new Response("Not Found", { status: 404 }));
-```
-
-It can be used also as a nested route:
-
-```js
-app.get("/hello/:name/*", ({ name, next }) => {
-  return next()
-    .path("/morning", () => `Good morning, ${name}`)
-    .path("/afternoon", () => `Good afternoon, ${name}`)
-    .path("/night", () => `Good night, ${name}`)
-    .default(() => `Hello, ${name}!`);
+    .post(action === "edit", () => editItem(item))
+    .default(() => new Response("Action not valid", { status: 404 }));
 });
 ```
 
 ## Error handler
 
-Use the `catch()` function to generate a custom response on error:
+Use the `catch()` function to handle errors and generate a custom response. The
+caught error is available in the `error` property.
 
 ```js
 app.catch(({ error }) =>
@@ -135,11 +137,11 @@ app.catch(({ error }) =>
 
 ## Web sockets
 
-The `.webSocket()` function creates a route to capture a WebSocket connection.
-You can use the `socket` property to access to the `WebSocket` instance:
+The `.socket()` function creates a route to capture a WebSocket connection. You
+can use the `socket` property to access to the `WebSocket` instance:
 
 ```js
-app.webSocket("/ws", ({ socket }) => {
+app.socket("/ws", ({ socket }) => {
   socket.onopen = () => console.log("Connection opened");
 
   socket.onmessage = (event) => {
@@ -148,24 +150,6 @@ app.webSocket("/ws", ({ socket }) => {
   };
 
   socket.onclose = () => console.log("Connection closed");
-});
-```
-
-Of course, you can create webSockets in sub-routes:
-
-```js
-app.path("/:name/*", ({ name, next }) => {
-  return next()
-    .webSocket("ws", ({ socket }) => {
-      socket.onopen = () => console.log(`Hello ${name}`);
-
-      socket.onmessage = (event) => {
-        console.log(`Message from ${name}:`, event.data);
-        socket.send(`Echo: ${event.data}`);
-      };
-
-      socket.onclose = () => console.log(`Bye ${name}!`);
-    });
 });
 ```
 
@@ -280,20 +264,6 @@ app.staticFiles("/*", root);
 app.staticFiles("/img/*", root + "/img");
 ```
 
-## Middlewares
-
-Middlewares allows to execute code before and after executing the router. You
-can register new middlewares with the `use()` function:
-
-```js
-app.use(async (request, next) => {
-  console.log("Before the router");
-  const response = next(request);
-  console.log("After the router");
-  return response;
-});
-```
-
 ## Distribute the app in different files
 
 For large apps, you may want to distribute routes in different files. You can
@@ -312,7 +282,7 @@ app.get("/:id", returnItem);
 export default app;
 ```
 
-Then, import them and mount on the paths /items:
+Then, import it and mount on the paths /items:
 
 ```js
 import items from "./routes/items.ts";

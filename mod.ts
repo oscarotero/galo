@@ -175,12 +175,12 @@ export default class Router<D extends Data = Data> {
   }
 
   /** Add a WebSocket handler */
-  webSocket<T>(handler: WebSocketHandler<T & D>): this;
-  webSocket<T>(
+  socket<T>(handler: WebSocketHandler<T & D>): this;
+  socket<T>(
     pattern: string,
     handler: WebSocketHandler<T & D>,
   ): this;
-  webSocket<T>(
+  socket<T>(
     patternOrHandler: string | WebSocketHandler<T & D>,
     handler?: WebSocketHandler<T & D>,
   ): this {
