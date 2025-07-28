@@ -46,6 +46,7 @@ export default app;
 - `default(callback)`: Default handler for unmatched requests.
 - `catch(callback)`: Error handler to capture exceptions.
 - `socket(callback)`: Matches requests with WebSocket connections.
+- `staticFiles(path, root)`: Serve static files from a folder.
 
 ## Slashes
 
@@ -251,7 +252,7 @@ app.get("/hello", () =>
 
 ## Static files
 
-Use the `staticFiles()` router to serve files from folders.
+Use the `staticFiles()` function to serve files from folders.
 
 ```js
 const root = Deno.cwd() + "/static";

@@ -1,4 +1,8 @@
 {
   "lock": false,
-  "exclude": ["CHANGELOG.md"]
+  "exclude": ["CHANGELOG.md"],
+  "tasks": {
+    "test": "deno test -R",
+    "bench": "deno bench"
+  }
 }

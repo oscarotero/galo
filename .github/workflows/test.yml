@@ -29,4 +29,7 @@ jobs:
         run: deno lint
 
       - name: Run benchmarks
-        run: deno bench
+        run: deno task bench
+
+      - name: Run tests
+        run: deno task test
