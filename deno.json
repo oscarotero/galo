@@ -1,3 +1,4 @@
 {
-  "lock": false
+  "lock": false,
+  "exclude": ["CHANGELOG.md"]
 }

@@ -29,7 +29,10 @@ interface Params {
   [key: string]: any; // Allow additional parameters
 }
 
-type Data = Record<string, any>;
+interface Data {
+  request?: Request;
+  [key: string]: any; // Allow additional parameters
+}
 
 /** Parameters common to all routes */
 interface HttpParams extends Params {
@@ -71,28 +74,25 @@ type WebSocketHandler<D> = (
 ) => void | Promise<void>;
 
 export default class Router<D extends Data = Data> {
-  middlewares: Middleware[] = [];
   routes: Route<any>[] = [];
   staticRoutes: StaticRoute[] = [];
   params: D;
   defaultHandler?: Handler<any>;
   errorHandler?: Handler<any>;
-  next: <T>(params?: T) => Router<D & T>;
   fetch: (request: Request) => Promise<Response>;
 
   constructor(params?: D) {
     this.params = params || {} as D;
-    this.next = <T>(params?: T) =>
-      new Router<D & T>({ ...this.params, ...params } as D & T);
     this.fetch = (request: Request) =>
-      this.#run(request, toParts(new URL(request.url).pathname));
+      this.#runRouter(request, toParts(new URL(request.url).pathname));
   }
 
-  /** Add middleware to the router */
-  /** Middleware will be executed before any route handler */
-  use(...middlewares: Middleware[]): this {
-    this.middlewares.push(...middlewares);
-    return this;
+  response(): Promise<Response> {
+    const { request } = this.params;
+    if (!request) {
+      throw new Error("No request available in the router");
+    }
+    return this.fetch(request);
   }
 
   /** Add a handler for a path */
@@ -233,28 +233,6 @@ export default class Router<D extends Data = Data> {
     return this;
   }
 
-  async #run(request: Request, parts: string[]): Promise<Response> {
-    if (this.middlewares.length === 0) {
-      return await this.#runRouter(request, parts);
-    }
-
-    const middlewares = [...this.middlewares];
-
-    const next: RequestHandler = async (
-      request: Request,
-    ): Promise<Response> => {
-      const middleware = middlewares.shift();
-
-      if (middleware) {
-        return await middleware(request, next);
-      }
-
-      return await this.#runRouter(request, parts);
-    };
-
-    return await next(request);
-  }
-
   async #runRouter(request: Request, parts: string[]): Promise<Response> {
     const reqMethod = request.method as Method;
 
@@ -275,6 +253,10 @@ export default class Router<D extends Data = Data> {
         return response;
       }
     }
+
+    const next = (params?: Record<string, unknown>) => {
+      return new Router({ ...this.params, ...params, request });
+    };
 
     for (const [handler, protocol, method, pattern] of this.routes) {
       if (method && reqMethod !== method) {
@@ -305,16 +287,16 @@ export default class Router<D extends Data = Data> {
         ...this.params,
         ...params,
         request,
-        next: this.next,
+        next,
       });
     }
 
     if (this.defaultHandler) {
       return await this.#runHandler(this.defaultHandler, {
         ...this.params,
-        request,
         _: parts,
-        next: this.next,
+        request,
+        next,
       });
     }
 
@@ -329,7 +311,7 @@ export default class Router<D extends Data = Data> {
     try {
       if (handler instanceof Router) {
         Object.assign(handler.params, this.params);
-        handleReturn = await handler.#run(params.request, params._);
+        handleReturn = await handler.#runRouter(params.request, params._);
       } else {
         handleReturn = await handler(params);
       }
@@ -366,7 +348,7 @@ export default class Router<D extends Data = Data> {
 
     // It's a nested Router
     if (handleReturn instanceof Router) {
-      return handleReturn.#run(params.request, params._);
+      return handleReturn.#runRouter(params.request, params._);
     }
 
     // It's something that can be used as the body of a Response
