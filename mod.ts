@@ -40,6 +40,7 @@ type Handler<D = Data, R = HandlerReturn> = (
 ) => R | Promise<R>;
 
 type HandlerReturn =
+  | void
   | undefined
   | null
   | Response
@@ -365,7 +366,7 @@ export default class Router<D extends Data = Data> {
       handleReturn instanceof FormData ||
       handleReturn instanceof DataView
     ) {
-      return new Response(handleReturn);
+      return new Response(handleReturn ?? undefined);
     }
 
     // It's a File
