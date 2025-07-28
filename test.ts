@@ -1,7 +1,7 @@
 import { assertEquals } from "jsr:@std/assert@1.0.13/equals";
 import Router from "./mod.ts";
 
-Deno.test("Basic methods", () => {
+Deno.test("Basic methods", async () => {
   const router = new Router();
   router.get("/hello", () => new Response("Hello, GET!"));
   router.post("/hello", () => new Response("Hello, POST!"));
@@ -19,20 +19,20 @@ Deno.test("Basic methods", () => {
     return new Response(`Error: ${error.message}`, { status: 500 });
   });
 
-  assert(["GET", "/hello"], router, "Hello, GET!");
-  assert(["POST", "/hello"], router, "Hello, POST!");
-  assert(["PUT", "/hello"], router, "Hello, PUT!");
-  assert(["DELETE", "/hello"], router, "Hello, DELETE!");
-  assert(["GET", "/other"], router, "Other, GET!");
-  assert(["POST", "/other"], router, "Other, POST!");
-  assert(["PUT", "/other"], router, "Other, PUT!");
-  assert(["DELETE", "/other"], router, "Other, DELETE!");
-  assert(["GET", "/not-found"], router, 404);
-  assert(["GET", "/not-found"], router, "Not found");
-  assert(["GET", "/error"], router, "Error: This is an error");
+  await assert(["GET", "/hello"], router, "Hello, GET!");
+  await assert(["POST", "/hello"], router, "Hello, POST!");
+  await assert(["PUT", "/hello"], router, "Hello, PUT!");
+  await assert(["DELETE", "/hello"], router, "Hello, DELETE!");
+  await assert(["GET", "/other"], router, "Other, GET!");
+  await assert(["POST", "/other"], router, "Other, POST!");
+  await assert(["PUT", "/other"], router, "Other, PUT!");
+  await assert(["DELETE", "/other"], router, "Other, DELETE!");
+  await assert(["GET", "/not-found"], router, 404);
+  await assert(["GET", "/not-found"], router, "Not found");
+  await assert(["GET", "/error"], router, "Error: This is an error");
 });
 
-Deno.test("Nested routes", () => {
+Deno.test("Nested routes", async () => {
   const router = new Router();
   router.path("/nested/:name/*", ({ next, name }) => {
     return next()
@@ -40,21 +40,26 @@ Deno.test("Nested routes", () => {
       .post("/hello", () => new Response(`Hello ${name} from nested POST!`));
   });
 
-  assert(["GET", "/nested/John/hello"], router, "Hello John from nested GET!");
-  assert(
+  await assert(
+    ["GET", "/nested/John/hello"],
+    router,
+    "Hello John from nested GET!",
+  );
+  await assert(
     ["POST", "/nested/John/hello"],
     router,
     "Hello John from nested POST!",
   );
 });
 
-Deno.test("Static files", () => {
+// sanitizeResources is set to true due https://github.com/denoland/std/issues/6776
+Deno.test("Static files", { sanitizeResources: false }, async () => {
   const router = new Router();
   router.staticFiles("/bench/*", Deno.cwd() + "/bench");
 
-  assert(["GET", "/bench/galo.ts"], router, 200);
-  assert(["HEAD", "/bench/galo.ts"], router, 200);
-  assert(["GET", "/bench/other.ts"], router, 404);
+  await assert(["GET", "/bench/galo.ts"], router, 200);
+  await assert(["HEAD", "/bench/galo.ts"], router, 200);
+  await assert(["GET", "/bench/other.ts"], router, 404);
 });
 
 async function assert(

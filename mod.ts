@@ -96,7 +96,9 @@ export default class Router<D extends Data = Data> {
 
   staticFiles(pattern: string, path: string): this {
     this.staticRoutes.push([
-      (request, file) => serveFile(request, join(path, file)),
+      async (request, file) => {
+        return await serveFile(request, join(path, file));
+      },
       toParts(pattern),
     ]);
 
