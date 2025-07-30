@@ -22,10 +22,10 @@ type StaticRoute = [
 ];
 
 /** Parameters passed to routes */
-interface Params {
+interface Params<T extends Data = Data> {
   _: string[];
   request: Request;
-  next: () => Router;
+  next: <D>(params?: D) => Router<T & D>;
   [key: string]: any; // Allow additional parameters
 }
 
