@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/) and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.2.2] - Unreleased
+### Added
+- `.sse()` function to handle Server side events.
+
 ### Fixed
 - Argument type of `next()` function.
 

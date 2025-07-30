@@ -43,9 +43,14 @@ export default app;
 - `put(callback)`: Matches PUT requests for any path.
 - `delete(path, callback)`: Matches DELETE requests for a specific path.
 - `delete(callback)`: Matches DELETE requests for any path.
+- `socket(callback)`: Matches requests with WebSocket connections for any path.
+- `socket(path, callback)`: Matches requests with WebSocket connections for a
+  specific path.
+- `sse(callback)`: Matches requests with Server-Send Events for any path.
+- `sse(path, callback)`: Matches requests with Server-Send Events for a specific
+  path.
 - `default(callback)`: Default handler for unmatched requests.
 - `catch(callback)`: Error handler to capture exceptions.
-- `socket(callback)`: Matches requests with WebSocket connections.
 - `staticFiles(path, root)`: Serve static files from a folder.
 
 ## Slashes
@@ -154,6 +159,25 @@ app.socket("/ws", ({ socket }) => {
 });
 ```
 
+## Server-Sent Events
+
+The `.sse()` function creates a route to return a server-send event stream. Use
+an async iterator:
+
+```js
+import type { ServerSentEventMessage } from "galo/mod.ts";
+
+app.sse("/sse", async function *(): AsyncGenerator<ServerSentEventMessage> {
+  console.log("SSE connection established:");
+  
+  // Simulate sending messages every second
+  for (let i = 0; i < 1000; i++) {
+    yield { data: `Message ${i + 1}` };
+    await wait(1000);
+  }
+});
+```
+
 ## Allowed router returns
 
 Routers can returns different types of data:
@@ -249,6 +273,8 @@ app.get("/hello", () =>
     }),
   ));
 ```
+
+Async generators are also used for server-sent events.
 
 ## Static files
 

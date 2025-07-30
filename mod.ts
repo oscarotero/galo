@@ -1,10 +1,15 @@
 // deno-lint-ignore-file no-explicit-any
 import { join } from "jsr:@std/path@1.1.1/join";
 import { serveFile } from "jsr:@std/http@1.0.20/file-server";
+import {
+  type ServerSentEventMessage,
+  ServerSentEventStream,
+} from "jsr:@std/http@1.0.20/server-sent-event-stream";
+export { ServerSentEventMessage };
 
 /** Supported methods and protocols */
 type Method = "GET" | "POST" | "PUT" | "DELETE" | "HEAD";
-type Protocol = "HTTP" | "WS";
+type Protocol = "HTTP" | "WS" | "SSE";
 
 /** Router is a tupple with [handler, protocol, method?, path?] */
 type RouteOrHandler = Handler<any> | Router<any>;
@@ -56,7 +61,8 @@ type HandlerReturn =
   | FormData
   | DataView
   | File
-  | AsyncGenerator<string | Uint8Array, void, unknown>;
+  | AsyncGenerator<string | Uint8Array, void, unknown>
+  | AsyncGenerator<ServerSentEventMessage, void, unknown>;
 
 type HandlerOrRouter<T extends Data, R = HandlerReturn> =
   | Handler<T, R>
@@ -180,13 +186,57 @@ export default class Router<D extends Data = Data> {
     >,
   ): this;
   socket<T>(
-    patternOrHandler: string | boolean | HandlerOrRouter<T & D>,
+    patternOrHandler:
+      | string
+      | boolean
+      | HandlerOrRouter<
+        T & D & { socket: WebSocket; response: Response },
+        void | Response
+      >,
     handler?: HandlerOrRouter<
       T & D & { socket: WebSocket; response: Response },
       void | Response
     >,
   ): this {
     return this.#addMethod("GET", "WS", patternOrHandler, handler);
+  }
+
+  /** Add handlers for Server-Sent Events requests */
+  sse<T>(
+    handler: HandlerOrRouter<
+      T & D & { request: Request },
+      | Response
+      | AsyncGenerator<ServerSentEventMessage | string>
+      | void
+    >,
+  ): this;
+  sse<T>(
+    pattern: string | boolean,
+    handler: HandlerOrRouter<
+      T & D & { request: Request },
+      | Response
+      | AsyncGenerator<ServerSentEventMessage | string>
+      | void
+    >,
+  ): this;
+  sse<T>(
+    patternOrHandler:
+      | string
+      | boolean
+      | HandlerOrRouter<
+        T & D & { request: Request },
+        | Response
+        | AsyncGenerator<ServerSentEventMessage | string>
+        | void
+      >,
+    handler?: HandlerOrRouter<
+      T & D & { request: Request },
+      | Response
+      | AsyncGenerator<ServerSentEventMessage | string>
+      | void
+    >,
+  ): this {
+    return this.#addMethod("GET", "SSE", patternOrHandler, handler);
   }
 
   /** Add handlers for any method requests */
@@ -281,12 +331,17 @@ export default class Router<D extends Data = Data> {
         Object.assign(params, { socket, response });
       }
 
-      return await this.#runHandler(handler, {
-        ...this.params,
-        ...params,
-        request,
-        next,
-      }, this.errorHandler);
+      return await this.#runHandler(
+        handler,
+        {
+          ...this.params,
+          ...params,
+          request,
+          next,
+        },
+        this.errorHandler,
+        protocol,
+      );
     }
 
     if (this.defaultHandler) {
@@ -305,6 +360,7 @@ export default class Router<D extends Data = Data> {
     handler: HandlerOrRouter<D>,
     params: Params & D,
     errorHandler?: Handler,
+    protocol?: Protocol,
   ): Promise<Response> {
     let handleReturn: HandlerReturn;
     try {
@@ -383,20 +439,18 @@ export default class Router<D extends Data = Data> {
 
     // It's an async generator (stream)
     if (isAsyncGenerator(handleReturn)) {
-      const textEncoder = new TextEncoder();
-      const stream = new ReadableStream({
-        async start(controller) {
-          for await (const chunk of handleReturn) {
-            controller.enqueue(
-              typeof chunk === "string" ? textEncoder.encode(chunk) : chunk,
-            );
-          }
-          controller.close();
-        },
-        cancel() {
-          handleReturn.return?.();
-        },
-      });
+      if (protocol === "SSE") {
+        const stream = generatorToServerEvents(
+          handleReturn as AsyncGenerator<ServerSentEventMessage, void, unknown>,
+        );
+        return new Response(stream, {
+          headers: {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+          },
+        });
+      }
+      const stream = generatorToStream(handleReturn);
       return new Response(stream);
     }
 
@@ -467,4 +521,40 @@ function isAsyncGenerator(
 
 function toError(err: unknown): Error {
   return err instanceof Error ? err : new Error(String(err));
+}
+
+function generatorToStream(
+  generator: AsyncGenerator<string | Uint8Array, void, unknown>,
+): ReadableStream<Uint8Array> {
+  const textEncoder = new TextEncoder();
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      for await (const chunk of generator) {
+        controller.enqueue(
+          typeof chunk === "string" ? textEncoder.encode(chunk) : chunk,
+        );
+      }
+      controller.close();
+    },
+    cancel() {
+      generator.return();
+    },
+  });
+}
+
+function generatorToServerEvents(
+  generator: AsyncGenerator<ServerSentEventMessage | string, void, unknown>,
+): ReadableStream<Uint8Array> {
+  return new ReadableStream<ServerSentEventMessage>({
+    async start(controller) {
+      for await (const event of generator) {
+        typeof event === "string"
+          ? controller.enqueue({ data: event })
+          : controller.enqueue(event);
+      }
+    },
+    cancel() {
+      generator.return();
+    },
+  }).pipeThrough(new ServerSentEventStream());
 }
