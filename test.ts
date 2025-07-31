@@ -5,7 +5,7 @@ Deno.test("Basic methods", async () => {
   const router = new Router();
   router.get("/hello", () => new Response("Hello, GET!"));
   router.post("/hello", () => new Response("Hello, POST!"));
-  router.put("/hello", () => new Response("Hello, PUT!"));
+  router.put("//hello//", () => new Response("Hello, PUT!"));
   router.delete("/hello", () => new Response("Hello, DELETE!"));
   router.path(
     "/other",

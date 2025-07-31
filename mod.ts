@@ -122,11 +122,11 @@ export default class Router<D extends Data = Data> {
   /** Add handlers for GET request */
   get<T>(handler: HandlerOrRouter<T & D>): this;
   get<T>(
-    pattern: string | boolean,
+    pattern: string,
     handler: HandlerOrRouter<T & D>,
   ): this;
   get<T>(
-    patternOrHandler: string | boolean | HandlerOrRouter<T & D>,
+    patternOrHandler: string | HandlerOrRouter<T & D>,
     handler?: HandlerOrRouter<T & D>,
   ): this {
     return this.#addMethod("GET", "HTTP", patternOrHandler, handler);
@@ -135,11 +135,11 @@ export default class Router<D extends Data = Data> {
   /** Add handlers for POST requests */
   post<T>(handler: HandlerOrRouter<T & D>): this;
   post<T>(
-    pattern: string | boolean,
+    pattern: string,
     handler: HandlerOrRouter<T & D>,
   ): this;
   post<T>(
-    patternOrHandler: string | boolean | HandlerOrRouter<T & D>,
+    patternOrHandler: string | HandlerOrRouter<T & D>,
     handler?: HandlerOrRouter<T & D>,
   ): this {
     return this.#addMethod("POST", "HTTP", patternOrHandler, handler);
@@ -148,11 +148,11 @@ export default class Router<D extends Data = Data> {
   /** Add handlers for PUT requests */
   put<T>(handler: HandlerOrRouter<T & D>): this;
   put<T>(
-    pattern: string | boolean,
+    pattern: string,
     handler: HandlerOrRouter<T & D>,
   ): this;
   put<T>(
-    patternOrHandler: string | boolean | HandlerOrRouter<T & D>,
+    patternOrHandler: string | HandlerOrRouter<T & D>,
     handler?: HandlerOrRouter<T & D>,
   ): this {
     return this.#addMethod("PUT", "HTTP", patternOrHandler, handler);
@@ -161,11 +161,11 @@ export default class Router<D extends Data = Data> {
   /** Add handlers for DELETE requests */
   delete<T>(handler: HandlerOrRouter<T & D>): this;
   delete<T>(
-    pattern: string | boolean,
+    pattern: string,
     handler: HandlerOrRouter<T & D>,
   ): this;
   delete<T>(
-    patternOrHandler: string | boolean | HandlerOrRouter<T & D>,
+    patternOrHandler: string | HandlerOrRouter<T & D>,
     handler?: HandlerOrRouter<T & D>,
   ): this {
     return this.#addMethod("DELETE", "HTTP", patternOrHandler, handler);
@@ -179,7 +179,7 @@ export default class Router<D extends Data = Data> {
     >,
   ): this;
   socket<T>(
-    pattern: string | boolean,
+    pattern: string,
     handler: HandlerOrRouter<
       T & D & { socket: WebSocket; response: Response },
       void | Response
@@ -188,7 +188,6 @@ export default class Router<D extends Data = Data> {
   socket<T>(
     patternOrHandler:
       | string
-      | boolean
       | HandlerOrRouter<
         T & D & { socket: WebSocket; response: Response },
         void | Response
@@ -211,7 +210,7 @@ export default class Router<D extends Data = Data> {
     >,
   ): this;
   sse<T>(
-    pattern: string | boolean,
+    pattern: string,
     handler: HandlerOrRouter<
       T & D & { request: Request },
       | Response
@@ -222,7 +221,6 @@ export default class Router<D extends Data = Data> {
   sse<T>(
     patternOrHandler:
       | string
-      | boolean
       | HandlerOrRouter<
         T & D & { request: Request },
         | Response
@@ -243,7 +241,7 @@ export default class Router<D extends Data = Data> {
   #addMethod(
     method: Method,
     protocol: Protocol,
-    patternOrHandler: string | boolean | HandlerOrRouter<any, any>,
+    patternOrHandler: string | HandlerOrRouter<any, any>,
     handler?: HandlerOrRouter<any, any>,
   ): this {
     if (
@@ -253,15 +251,9 @@ export default class Router<D extends Data = Data> {
       return this.#add(patternOrHandler, protocol, method);
     }
     if (typeof handler === "function" || handler instanceof Router) {
-      if (typeof patternOrHandler === "string") {
-        return this.#add(handler, protocol, method, patternOrHandler);
-      }
-      if (patternOrHandler === true) {
-        return this.#add(handler, protocol, method);
-      }
-      return this;
+      return this.#add(handler, protocol, method, patternOrHandler);
     }
-    throw new Error("Handler must be a function");
+    throw new Error("Handler must be a function or a Router instance");
   }
 
   #add(

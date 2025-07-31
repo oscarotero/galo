@@ -55,13 +55,13 @@ export default app;
 
 ## Slashes
 
-Trailing or leading slashes are ignored by the router.
+Trailing, leading or duplicated slashes are ignored by the router.
 
 ```js
 // The following routes are equivalent
 app.get("/hello/world", () => "Hello world");
 app.get("/hello/world/", () => "Hello world");
-app.get("hello/world", () => "Hello world");
+app.get("hello//world", () => "Hello world");
 ```
 
 ## Nested routes
@@ -107,26 +107,6 @@ app.path("/item/:id", ({ id, next }) => {
     .get(() => printItem(item))
     .put(() => updateItem(item))
     .delete(() => deleteItem(item));
-});
-```
-
-### Booleans
-
-Instead of paths, it's possible to use booleans to match a route:
-
-```js
-app.path("/item/:action/:id", ({ action, id, next }) => {
-  const item = getItem(id);
-
-  if (!item) {
-    return new Response("Not Found", { status: 404 });
-  }
-
-  return next()
-    .get(action === "view", () => printItem(item))
-    .get(action === "edit", () => editForm(item))
-    .post(action === "edit", () => editItem(item))
-    .default(() => new Response("Action not valid", { status: 404 }));
 });
 ```
 
