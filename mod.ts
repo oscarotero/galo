@@ -105,22 +105,14 @@ export default class Router<D extends Data = Data> {
   staticFiles(pattern: string, path: string): this {
     this.staticRoutes.push([
       async (request, file) => {
-        const filePath = join(
-          path,
-          file.endsWith("/") ? file + "index.html" : file,
-        );
+        const filePath = join(path, file);
 
         try {
-          // Redirect /example to /example/
           const fileInfo = await Deno.stat(filePath);
 
+          // If it's a directory, serve the index.html file
           if (fileInfo.isDirectory) {
-            return new Response(null, {
-              status: 301,
-              headers: {
-                location: join(filePath, "/"),
-              },
-            });
+            return await serveFile(request, join(filePath, "index.html"));
           }
 
           // Serve the static file
@@ -314,10 +306,9 @@ export default class Router<D extends Data = Data> {
       if (reqMethod !== "GET" && reqMethod !== "HEAD") {
         continue;
       }
-
       const params = matches(pattern, parts);
 
-      if (!params?._.length) {
+      if (!params) {
         continue;
       }
 
