@@ -1,5 +1,6 @@
 // deno-lint-ignore-file no-explicit-any
-import { join } from "jsr:@std/path@1.1.1/join";
+import { join } from "jsr:@std/path@1.1.1/posix/join";
+import { extname } from "jsr:@std/path@1.1.1/posix/extname";
 import { serveFile } from "jsr:@std/http@1.0.20/file-server";
 import {
   type ServerSentEventMessage,
@@ -104,7 +105,41 @@ export default class Router<D extends Data = Data> {
   staticFiles(pattern: string, path: string): this {
     this.staticRoutes.push([
       async (request, file) => {
-        return await serveFile(request, join(path, file));
+        const filePath = join(
+          path,
+          file.endsWith("/") ? file + "index.html" : file,
+        );
+
+        try {
+          // Redirect /example to /example/
+          const fileInfo = await Deno.stat(filePath);
+
+          if (fileInfo.isDirectory) {
+            return new Response(null, {
+              status: 301,
+              headers: {
+                location: join(filePath, "/"),
+              },
+            });
+          }
+
+          // Serve the static file
+          return await serveFile(request, filePath, { fileInfo });
+        } catch {
+          try {
+            // Exists a HTML file with this name?
+            if (!extname(filePath)) {
+              return await serveFile(request, filePath + ".html");
+            }
+          } catch {
+            // Continue
+          }
+
+          return new Response(
+            "Not found",
+            { status: 404 },
+          );
+        }
       },
       toParts(pattern),
     ]);
