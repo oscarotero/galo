@@ -54,13 +54,13 @@ type HandlerReturn =
   | object
   | Array<unknown>
   | Router
-  | Uint8Array
+  | Uint8Array<ArrayBuffer>
   | ReadableStream
   | Blob
   | ArrayBuffer
   | URLSearchParams
   | FormData
-  | DataView
+  | DataView<ArrayBuffer>
   | File
   | AsyncGenerator<string | Uint8Array, void, unknown>
   | AsyncGenerator<ServerSentEventMessage, void, unknown>;
@@ -302,23 +302,24 @@ export default class Router<D extends Data = Data> {
   async #runRouter(request: Request, parts: string[]): Promise<Response> {
     const reqMethod = request.method as Method;
 
-    for (const [handler, pattern] of this.staticRoutes) {
-      if (reqMethod !== "GET" && reqMethod !== "HEAD") {
-        continue;
-      }
-      const params = matches(pattern, parts);
+    // Check if it's a static file
+    if (reqMethod === "GET" || reqMethod === "HEAD") {
+      for (const [handler, pattern] of this.staticRoutes) {
+        const params = matches(pattern, parts);
 
-      if (!params) {
-        continue;
-      }
+        if (!params) {
+          continue;
+        }
 
-      const response = await handler(request, params._.join("/"));
+        const response = await handler(request, params._.join("/"));
 
-      if (response.status !== 404) {
-        return response;
+        if (response.status !== 404) {
+          return response;
+        }
       }
     }
 
+    // Dynamic route
     const next = (params?: Record<string, unknown>) => {
       return new Router({ ...this.params, ...params, request });
     };
