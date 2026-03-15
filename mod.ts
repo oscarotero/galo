@@ -70,6 +70,7 @@ type HandlerOrRouter<T extends Data, R = HandlerReturn> =
   | Router<T>;
 
 export default class Router<D extends Data = Data> {
+  basePath: string[];
   routes: Route[] = [];
   staticRoutes: StaticRoute[] = [];
   params: D;
@@ -77,8 +78,9 @@ export default class Router<D extends Data = Data> {
   errorHandler?: Handler<any>;
   fetch: (request: Request) => Promise<Response>;
 
-  constructor(params?: D) {
+  constructor(params?: D, basePath?: string) {
     this.params = params || {} as D;
+    this.basePath = basePath ? toParts(basePath) : [];
     this.fetch = (request: Request) =>
       this.#runRouter(request, toParts(new URL(request.url).pathname));
   }
@@ -133,7 +135,7 @@ export default class Router<D extends Data = Data> {
           );
         }
       },
-      toParts(pattern),
+      [...this.basePath, ...toParts(pattern)],
     ]);
 
     return this;
@@ -331,7 +333,7 @@ export default class Router<D extends Data = Data> {
         continue;
       }
       const routeParts = typeof pattern === "string"
-        ? toParts(pattern)
+        ? [...this.basePath, ...toParts(pattern)]
         : pattern;
       route[3] = routeParts; // Update the route with the parts
 

@@ -61,6 +61,16 @@ Deno.test("Static files", async () => {
   await assert(["GET", "/bench/other.ts"], router, 404);
 });
 
+Deno.test("Base path", async () => {
+  const router = new Router({}, "/sub-folder");
+
+  router.get("/hello", () => new Response("It works"));
+
+  await assert(["GET", "/sub-folder"], router, 404);
+  await assert(["GET", "/hello"], router, 404);
+  await assert(["GET", "/sub-folder/hello"], router, "It works");
+});
+
 async function assert(
   request: Request | [string, string],
   router: Router,

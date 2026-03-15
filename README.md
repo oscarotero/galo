@@ -298,3 +298,38 @@ const app = new Router();
 
 app.path("/items/*", items);
 ```
+
+## Manage data
+
+You can pass variables that will be available in the inner routes:
+
+```js
+import { Router } from "galo/mod.ts";
+
+const app = new Router({
+  appName: "My app",
+});
+
+app.get("/", ({ appName }) => {
+  return `Welcome to ${appName}`;
+});
+
+export default app;
+```
+
+## Base path
+
+If your app lives in a subdirectory, you can pass a base path as the second
+argument:
+
+```js
+import { Router } from "galo/mod.ts";
+
+const app = new Router({}, "/path/to/my/app");
+
+app.get("/foo", ({ request }) => {
+  return request.pathname; // /path/to/my/app/foo
+});
+
+export default app;
+```
