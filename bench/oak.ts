@@ -1,5 +1,5 @@
-import { Application } from "jsr:@oak/oak@17.1.5/application";
-import { Router } from "jsr:@oak/oak@17.1.5/router";
+import { Application } from "jsr:@oak/oak@17.2.0/application";
+import { Router } from "jsr:@oak/oak@17.2.0/router";
 
 const router = new Router();
 

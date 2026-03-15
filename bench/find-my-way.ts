@@ -1,4 +1,4 @@
-import FindMyWay from "npm:find-my-way@9.3.0";
+import FindMyWay from "npm:find-my-way@9.5.0";
 
 const router = FindMyWay();
 

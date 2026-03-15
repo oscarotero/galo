@@ -1,4 +1,4 @@
-import { Hono } from "npm:hono@4.8.5";
+import { Hono } from "npm:hono@4.12.8";
 
 const app = new Hono();
 

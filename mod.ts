@@ -1,11 +1,11 @@
 // deno-lint-ignore-file no-explicit-any
-import { join } from "jsr:@std/path@1.1.1/posix/join";
-import { extname } from "jsr:@std/path@1.1.1/posix/extname";
-import { serveFile } from "jsr:@std/http@1.0.20/file-server";
+import { join } from "jsr:@std/path@1.1.4/posix/join";
+import { extname } from "jsr:@std/path@1.1.4/posix/extname";
+import { serveFile } from "jsr:@std/http@1.0.25/file-server";
 import {
   type ServerSentEventMessage,
   ServerSentEventStream,
-} from "jsr:@std/http@1.0.20/server-sent-event-stream";
+} from "jsr:@std/http@1.0.25/server-sent-event-stream";
 export { ServerSentEventMessage };
 
 /** Supported methods and protocols */
