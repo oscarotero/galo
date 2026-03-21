@@ -40,6 +40,12 @@ interface Data {
   [key: string]: any; // Allow additional parameters
 }
 
+interface ParentConfig<D extends Data = Data> {
+  params: D;
+  defaultHandler?: HandlerOrRouter<any>;
+  errorHandler?: Handler<any>;
+}
+
 /** Handler function type */
 type Handler<D = Data, R = HandlerReturn> = (
   params: D & Params,
@@ -301,7 +307,11 @@ export default class Router<D extends Data = Data> {
     return this;
   }
 
-  async #runRouter(request: Request, parts: string[]): Promise<Response> {
+  async #runRouter(
+    request: Request,
+    parts: string[],
+    parentConfig?: ParentConfig,
+  ): Promise<Response> {
     const reqMethod = request.method as Method;
 
     // Check if it's a static file
@@ -323,7 +333,12 @@ export default class Router<D extends Data = Data> {
 
     // Dynamic route
     const next = (params?: Record<string, unknown>) => {
-      return new Router({ ...this.params, ...params, request })
+      return new Router({
+        ...this.params,
+        ...parentConfig?.params,
+        ...params,
+        request,
+      })
         .default(this.defaultHandler!)
         .catch(this.errorHandler!);
     };
@@ -358,22 +373,36 @@ export default class Router<D extends Data = Data> {
         handler,
         {
           ...this.params,
+          ...parentConfig?.params,
           ...params,
           request,
           next,
         },
         this.errorHandler,
         protocol,
+        parentConfig,
       );
     }
 
-    if (this.defaultHandler) {
-      return await this.#runHandler(this.defaultHandler, {
-        ...this.params,
-        _: parts,
-        request,
-        next,
-      }, this.errorHandler);
+    const effectiveDefaultHandler = this.defaultHandler ??
+      parentConfig?.defaultHandler;
+    const effectiveErrorHandler = this.errorHandler ??
+      parentConfig?.errorHandler;
+
+    if (effectiveDefaultHandler) {
+      return await this.#runHandler(
+        effectiveDefaultHandler,
+        {
+          ...this.params,
+          ...parentConfig?.params,
+          _: parts,
+          request,
+          next,
+        },
+        effectiveErrorHandler,
+        undefined,
+        parentConfig,
+      );
     }
 
     return new Response("Not Found", { status: 404 });
@@ -384,20 +413,36 @@ export default class Router<D extends Data = Data> {
     params: Params & D,
     errorHandler?: Handler,
     protocol?: Protocol,
+    parentConfig?: ParentConfig,
   ): Promise<Response> {
     let handleReturn: HandlerReturn;
     try {
       if (handler instanceof Router) {
-        Object.assign(handler.params, this.params);
-        handleReturn = await handler.#runRouter(params.request, params._);
+        handleReturn = await handler.#runRouter(
+          params.request,
+          params._,
+          {
+            params: {
+              ...this.params,
+              ...parentConfig?.params,
+              ...params,
+            },
+            defaultHandler: this.defaultHandler ??
+              parentConfig?.defaultHandler,
+            errorHandler: this.errorHandler ??
+              parentConfig?.errorHandler,
+          },
+        );
       } else {
         handleReturn = await handler(params);
       }
     } catch (err) {
       const error = toError(err);
-      if (errorHandler) {
+      const effectiveErrorHandler = errorHandler ??
+        parentConfig?.errorHandler;
+      if (effectiveErrorHandler) {
         try {
-          return await this.#runHandler(errorHandler, {
+          return await this.#runHandler(effectiveErrorHandler, {
             ...params,
             error,
           });
@@ -426,7 +471,7 @@ export default class Router<D extends Data = Data> {
 
     // It's a nested Router
     if (handleReturn instanceof Router) {
-      return handleReturn.#runRouter(params.request, params._);
+      return handleReturn.#runRouter(params.request, params._, parentConfig);
     }
 
     // It's something that can be used as the body of a Response
