@@ -323,7 +323,9 @@ export default class Router<D extends Data = Data> {
 
     // Dynamic route
     const next = (params?: Record<string, unknown>) => {
-      return new Router({ ...this.params, ...params, request });
+      return new Router({ ...this.params, ...params, request })
+        .default(this.defaultHandler!)
+        .catch(this.errorHandler!);
     };
 
     for (const route of this.routes) {

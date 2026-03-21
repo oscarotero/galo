@@ -52,6 +52,64 @@ Deno.test("Nested routes", async () => {
   );
 });
 
+Deno.test("Nested routes without default/error handlers", async () => {
+  const router = new Router();
+  router.default(() => new Response("[TOP] Not Found", { status: 404 }));
+  router.catch(({ error }) => {
+    return new Response(`[TOP] Error: ${error.message}`, { status: 500 });
+  });
+  router.path("/nested/:name/*", ({ next, name }) => {
+    return next()
+      .get("/hello", () => new Response(`Hello ${name} from nested GET!`))
+      .post("/hello", () => {
+        throw new Error(`system failure, ${name}`);
+      });
+  });
+
+  await assert(
+    ["PUT", "/nested/John/hello"],
+    router,
+    "[TOP] Not Found",
+  );
+  await assert(
+    ["POST", "/nested/Neo/hello"],
+    router,
+    "[TOP] Error: system failure, Neo",
+  );
+});
+
+Deno.test("Nested routes with explicit default/error handlers", async () => {
+  const router = new Router();
+  router.default(() => new Response("[TOP] Not Found", { status: 404 }));
+  router.catch(({ error }) => {
+    return new Response(`[TOP] Error: ${error.message}`, { status: 500 });
+  });
+  router.path("/nested/:name/*", ({ next, name }) => {
+    return next()
+      .default(() => new Response("[NESTED] Not Found", { status: 404 }))
+      .get("/hello", () => new Response(`Hello ${name} from nested GET!`))
+      .post("/hello", () => {
+        throw new Error(`system failure, ${name}`);
+      })
+      .catch(({ error }) => {
+        return new Response(`[NESTED] Error: ${error.message}`, {
+          status: 500,
+        });
+      });
+  });
+
+  await assert(
+    ["PUT", "/nested/John/hello"],
+    router,
+    "[NESTED] Not Found",
+  );
+  await assert(
+    ["POST", "/nested/Neo/hello"],
+    router,
+    "[NESTED] Error: system failure, Neo",
+  );
+});
+
 Deno.test("Static files", async () => {
   const router = new Router();
   router.staticFiles("/bench/*", Deno.cwd() + "/bench");
