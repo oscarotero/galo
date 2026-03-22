@@ -12,19 +12,14 @@ const app = new Router();
 
 app
   .get("/", () => new Response("Hello world"))
-
   //For convenience, return a string to create a HTML response:
   .get("/hello.html", () => "Hello <strong>world</strong>")
-
   //Return an object or array to create a JSON response:
   .get("/hello.json", () => ({ text: "Hello world" }))
-
   //Captured values are passed as properties
   .get("/:name", ({ name }) => `Hello <strong>${name}</strong>`)
-
   //Support wilcard to capture the remaining path (array stored in the `_` property)
   .get("/example/*", ({ _ }) => `The wildcard content is: ${_.join(", ")}`)
-
   //The `Request` instance is passed as `request` property:
   .get("/hello", ({ request }) => `Hello from ${request.url}`);
 
