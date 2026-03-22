@@ -110,6 +110,18 @@ app.path("/item/:id", ({ id, next }) => {
 });
 ```
 
+Nested routes automatically inherit `default()` and `catch()` handlers from the
+parent router, unless explicitly overriden:
+
+```js
+app.path("/static/js/*", ({ next }) => {
+  return next()
+    // e.g. "/static/js/other.js" will avoid the implicit default 404 Not Found
+    .default(() => new Response(null, { status: 204 }))
+    .get("/bundle.js", () => Deno.readFile("bundle.js"));
+});
+```
+
 ## Error handler
 
 Use the `catch()` function to handle errors and generate a custom response. The
