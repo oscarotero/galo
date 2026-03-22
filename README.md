@@ -23,10 +23,10 @@ app
   .get("/:name", ({ name }) => `Hello <strong>${name}</strong>`)
 
   //Support wilcard to capture the remaining path (array stored in the `_` property)
-  .get("/example/*", ({ _ }) => `The wildcard content is: ${_.join(", ")}`);
+  .get("/example/*", ({ _ }) => `The wildcard content is: ${_.join(", ")}`)
 
   //The `Request` instance is passed as `request` property:
-  .get("/hello", ({ request }) => `Hello from ${request.url}`)
+  .get("/hello", ({ request }) => `Hello from ${request.url}`);
 
 //Returns the app so you can run it with `deno serve app.ts`
 export default app;
